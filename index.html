@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>蓝烨·私密相册 | 后台管理</title>
+    <title>蓝烨·私密相册</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -66,15 +66,14 @@
             gap: 1rem;
         }
         .header h1 { color: #fbbf24; font-size: 1.8rem; }
-        .admin-btn {
+        .note {
             background: rgba(0,0,0,0.5);
             border: 1px solid #fbbf24;
             padding: 0.5rem 1.2rem;
             border-radius: 2rem;
             color: #fbbf24;
-            cursor: pointer;
+            font-size: 0.8rem;
         }
-        .admin-btn:hover { background: #fbbf24; color: #0f172a; }
         
         .gallery {
             display: grid;
@@ -100,59 +99,6 @@
         .card .title { font-weight: bold; margin-bottom: 0.25rem; }
         .card .desc { font-size: 0.8rem; opacity: 0.7; }
         
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.9);
-            backdrop-filter: blur(20px);
-            z-index: 3000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal.active { display: flex; }
-        .modal-content {
-            background: #1e293b;
-            border-radius: 1.5rem;
-            padding: 2rem;
-            width: 90%;
-            max-width: 500px;
-            border: 1px solid #fbbf24;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        .modal-content h3 { color: #fbbf24; margin-bottom: 1rem; }
-        .modal-content input, .modal-content textarea {
-            width: 100%;
-            padding: 0.7rem;
-            margin-bottom: 1rem;
-            border-radius: 0.5rem;
-            border: none;
-            background: #0f172a;
-            color: white;
-        }
-        .modal-content button {
-            background: #fbbf24;
-            border: none;
-            padding: 0.7rem;
-            border-radius: 0.5rem;
-            font-weight: bold;
-            cursor: pointer;
-            margin-right: 0.5rem;
-        }
-        .list-item {
-            background: #0f172a;
-            margin-bottom: 0.5rem;
-            padding: 0.8rem;
-            border-radius: 0.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .list-item button { margin-left: 0.5rem; padding: 0.3rem 0.8rem; cursor: pointer; }
         .toast {
             position: fixed;
             bottom: 30px;
@@ -185,39 +131,19 @@
 <div id="mainContent" class="container main-content">
     <div class="header">
         <h1><i class="fas fa-images"></i> 蓝烨数码科技工作室</h1>
-        <button class="admin-btn" id="openAdminBtn"><i class="fas fa-crown"></i> 后台管理</button>
+        <div class="note"><i class="fas fa-info-circle"></i> 后台管理中，请联系管理员增删图片</div>
     </div>
     <div class="gallery" id="gallery"></div>
     <footer>✨ 悬浮流光 | 蓝烨工作室</footer>
-</div>
-
-<div id="adminModal" class="modal">
-    <div class="modal-content">
-        <h3><i class="fas fa-database"></i> 图片管理</h3>
-        <div id="imageList"></div>
-        <hr style="margin: 1rem 0; border-color: #334155;">
-        <h4>添加新图片</h4>
-        <input type="text" id="newUrl" placeholder="图片URL">
-        <input type="text" id="newTitle" placeholder="标题">
-        <textarea id="newDesc" rows="2" placeholder="描述"></textarea>
-        <button id="saveBtn"><i class="fas fa-save"></i> 保存</button>
-        <button id="closeAdminBtn">关闭</button>
-    </div>
 </div>
 
 <div id="toast" class="toast"></div>
 
 <script>
     const FRONT_PASSWORD = "刷机认证蓝烨数码科技工作室";
-    
-    // GitHub 配置
-    const GITHUB_TOKEN = "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";
-    const GITHUB_USER = "lanyeya";
-    const GITHUB_REPO = "lanye.github.io";
-    const JSON_FILE_PATH = "data.json";
+    const DATA_URL = "https://raw.githubusercontent.com/lanyeya/lanye.github.io/main/data.json";
     
     let imagesData = [];
-    let currentEditId = null;
     
     function showToast(msg) {
         const toast = document.getElementById('toast');
@@ -226,101 +152,25 @@
         setTimeout(() => toast.style.opacity = '0', 2000);
     }
     
-    // 从 GitHub 读取数据
     async function loadData() {
         try {
-            const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${JSON_FILE_PATH}`;
-            const response = await fetch(url, {
-                headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
-            });
-            
-            if (response.status === 404) {
-                imagesData = [];
-                await saveData();
-                return;
-            }
-            
-            const data = await response.json();
-            const content = atob(data.content);
-            imagesData = JSON.parse(content);
-            renderGallery();
-        } catch (e) {
-            console.error('加载失败', e);
-            showToast('加载失败，请刷新重试');
-        }
-    }
-    
-    // 保存数据到 GitHub
-    async function saveData() {
-        try {
-            const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${JSON_FILE_PATH}`;
-            let sha = null;
-            
-            const getRes = await fetch(url, {
-                headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
-            });
-            
-            if (getRes.status === 200) {
-                const existing = await getRes.json();
-                sha = existing.sha;
-            }
-            
-            const content = btoa(unescape(encodeURIComponent(JSON.stringify(imagesData, null, 2))));
-            const putRes = await fetch(url, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `token ${GITHUB_TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: 'Update photo data',
-                    content: content,
-                    sha: sha
-                })
-            });
-            
-            if (putRes.ok) {
-                showToast('保存成功');
+            const response = await fetch(DATA_URL + "?t=" + Date.now());
+            if (response.ok) {
+                imagesData = await response.json();
                 renderGallery();
             } else {
-                showToast('保存失败');
+                showToast('加载失败，请刷新重试');
             }
         } catch (e) {
-            console.error('保存失败', e);
-            showToast('保存失败');
-        }
-    }
-    
-    async function addOrUpdateImage(id, url, title, desc) {
-        if (id) {
-            const idx = imagesData.findIndex(i => i.id === id);
-            if (idx !== -1) {
-                imagesData[idx] = { id, url, title, description: desc };
-            }
-        } else {
-            imagesData.push({
-                id: Date.now(),
-                url: url,
-                title: title,
-                description: desc
-            });
-        }
-        await saveData();
-    }
-    
-    async function deleteImage(id) {
-        if (confirm('确定删除这张图片吗？')) {
-            imagesData = imagesData.filter(i => i.id !== id);
-            await saveData();
-            renderAdminList();
+            console.error('加载失败', e);
+            showToast('加载失败，请检查网络');
         }
     }
     
     function renderGallery() {
         const gallery = document.getElementById('gallery');
-        if (!gallery) return;
         if (imagesData.length === 0) {
-            gallery.innerHTML = '<div class="empty-tip">✨ 暂无图片，请在后台管理中添加上传 ✨</div>';
+            gallery.innerHTML = '<div class="empty-tip">✨ 暂无图片，请联系管理员添加 ✨</div>';
             return;
         }
         
@@ -333,62 +183,6 @@
                 </div>
             </div>
         `).join('');
-    }
-    
-    function renderAdminList() {
-        const container = document.getElementById('imageList');
-        if (!container) return;
-        if (imagesData.length === 0) {
-            container.innerHTML = '<div style="color:#888; text-align:center;">暂无图片</div>';
-            return;
-        }
-        
-        container.innerHTML = imagesData.map(img => `
-            <div class="list-item">
-                <div style="flex:1">
-                    <strong>${escapeHtml(img.title)}</strong><br>
-                    <small style="color:#888;">${escapeHtml(img.description.substring(0, 30))}</small>
-                </div>
-                <div>
-                    <button onclick="editImage(${img.id})">编辑</button>
-                    <button onclick="deleteImage(${img.id})" style="background:#dc2626; color:white;">删除</button>
-                </div>
-            </div>
-        `).join('');
-    }
-    
-    window.editImage = function(id) {
-        const img = imagesData.find(i => i.id === id);
-        if (img) {
-            document.getElementById('newUrl').value = img.url;
-            document.getElementById('newTitle').value = img.title;
-            document.getElementById('newDesc').value = img.description;
-            currentEditId = id;
-            document.getElementById('saveBtn').innerHTML = '<i class="fas fa-edit"></i> 更新';
-        }
-    };
-    
-    function resetForm() {
-        document.getElementById('newUrl').value = '';
-        document.getElementById('newTitle').value = '';
-        document.getElementById('newDesc').value = '';
-        currentEditId = null;
-        document.getElementById('saveBtn').innerHTML = '<i class="fas fa-save"></i> 保存';
-    }
-    
-    async function handleSave() {
-        const url = document.getElementById('newUrl').value.trim();
-        const title = document.getElementById('newTitle').value.trim();
-        const desc = document.getElementById('newDesc').value.trim();
-        
-        if (!url || !title) {
-            showToast('URL 和标题不能为空');
-            return;
-        }
-        
-        await addOrUpdateImage(currentEditId, url, title, desc);
-        resetForm();
-        renderAdminList();
     }
     
     function openLightbox(url, title, desc) {
@@ -429,24 +223,6 @@
         
         document.getElementById('pwdInput').onkeypress = (e) => {
             if (e.key === 'Enter') document.getElementById('unlockBtn').click();
-        };
-        
-        document.getElementById('openAdminBtn').onclick = () => {
-            renderAdminList();
-            resetForm();
-            document.getElementById('adminModal').classList.add('active');
-        };
-        
-        document.getElementById('closeAdminBtn').onclick = () => {
-            document.getElementById('adminModal').classList.remove('active');
-        };
-        
-        document.getElementById('saveBtn').onclick = handleSave;
-        
-        document.getElementById('adminModal').onclick = (e) => {
-            if (e.target === document.getElementById('adminModal')) {
-                document.getElementById('adminModal').classList.remove('active');
-            }
         };
     }
     
