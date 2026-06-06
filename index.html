@@ -425,8 +425,10 @@
 <script>
     const FRONT_PASSWORD = "刷机认证蓝烨数码科技工作室";
     const BACKEND_PASSWORD = "203399LLJ";
-    let backendHashStored = "";
+    // 云存储 API 地址
+    const CLOUD_API = "https://my-json-api.2070825130.workers.dev/api/images";
     
+    let backendHashStored = "";
     let imagesData = [];
     let currentEditId = null;
     let frontUnlocked = false;
@@ -461,18 +463,54 @@
     
     function showToast(msg, dur=1800) { toastDiv.innerText = msg; toastDiv.style.opacity = '1'; setTimeout(() => toastDiv.style.opacity = '0', dur); }
     
-    function saveData() { localStorage.setItem('lanYe_imgData_v3', JSON.stringify(imagesData)); }
-    function loadDefaultData() {
-        const stored = localStorage.getItem('lanYe_imgData_v3');
-        if(stored) { imagesData = JSON.parse(stored); }
-        else {
-            imagesData = [
-                { id: Date.now()+1, url: "https://img.catcdn.cn/ba/?img=BG_CS_Event_15.webp", title: "阿比多斯·日常", description: "对策委员会午后阳光" },
-                { id: Date.now()+2, url: "https://img.catcdn.cn/ba/?type=home", title: "老师办公室", description: "温馨大厅随机插画" },
-                { id: Date.now()+3, url: "https://img.catcdn.cn/ba/?type=cg", title: "主线剧情CG", description: "神秘学园的记忆" },
-                { id: Date.now()+4, url: "https://img.catcdn.cn/ba/?img=BG_CS_S1Final_25_2.webp", title: "最终章·祈愿", description: "星野与白子羁绊" }
-            ];
-            saveData();
+    // 本地备份
+    function saveToLocalBackup() { localStorage.setItem('lanYe_imgData_cache', JSON.stringify(imagesData)); }
+    function loadFromLocalBackup() {
+        const cached = localStorage.getItem('lanYe_imgData_cache');
+        if(cached) {
+            imagesData = JSON.parse(cached);
+            return true;
+        }
+        return false;
+    }
+    
+    // 从云端加载图片数据
+    async function loadImagesFromCloud() {
+        try {
+            const response = await fetch(CLOUD_API + '?t=' + Date.now());
+            if (response.status === 404) {
+                // 首次使用，初始化为空数组（不包含默认图片）
+                imagesData = [];
+                await saveImagesToCloud();
+                showToast('云端存储已初始化', 1000);
+            } else {
+                const data = await response.json();
+                imagesData = data || [];
+            }
+            saveToLocalBackup();
+            return true;
+        } catch (e) {
+            console.error('云端加载失败', e);
+            showToast('连接云端失败，使用本地缓存', 2000);
+            return loadFromLocalBackup();
+        }
+    }
+    
+    // 保存图片数据到云端
+    async function saveImagesToCloud() {
+        try {
+            const response = await fetch(CLOUD_API, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(imagesData)
+            });
+            if (!response.ok) throw new Error('保存失败');
+            saveToLocalBackup();
+            return true;
+        } catch (e) {
+            console.error('云端保存失败', e);
+            showToast('云端保存失败，请稍后重试', 2000);
+            return false;
         }
     }
     
@@ -540,20 +578,37 @@
             });
         });
         document.querySelectorAll('.delete-item').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+            btn.addEventListener('click', async (e) => {
                 const id = parseInt(btn.dataset.id);
-                if(confirm('永久删除？')) { imagesData = imagesData.filter(i=>i.id!==id); saveData(); renderAdminList(); renderFront(); showToast('已删除',1000); }
+                if(confirm('永久删除？')) {
+                    imagesData = imagesData.filter(i=>i.id!==id);
+                    await saveImagesToCloud();
+                    renderAdminList();
+                    renderFront();
+                    showToast('已删除',1000);
+                }
             });
         });
     }
-    function handleSaveImage() {
+    async function handleSaveImage() {
         let url = adminUrl.value.trim(), title = adminTitle.value.trim(), desc = adminDesc.value.trim();
         if(!url || !title) { showToast('链接和标题不能为空',1200); return; }
         if(currentEditId) {
             const idx = imagesData.findIndex(i=>i.id===currentEditId);
-            if(idx!==-1) { imagesData[idx] = {...imagesData[idx], url, title, description: desc}; saveData(); showToast('更新成功',1000); resetAdminForm(); renderAdminList(); renderFront(); }
+            if(idx!==-1) { imagesData[idx] = {...imagesData[idx], url, title, description: desc}; }
         } else {
-            imagesData.push({ id:Date.now(), url, title, description: desc }); saveData(); showToast('添加成功',1000); resetAdminForm(); renderAdminList(); renderFront();
+            imagesData.push({ id: Date.now(), url, title, description: desc });
+        }
+        const success = await saveImagesToCloud();
+        if(success) {
+            showToast(currentEditId ? '更新成功' : '添加成功', 1000);
+            resetAdminForm();
+            renderAdminList();
+            renderFront();
+        } else {
+            // 保存失败时回滚界面
+            renderAdminList();
+            renderFront();
         }
     }
     function resetAdminForm() { adminUrl.value=''; adminTitle.value=''; adminDesc.value=''; currentEditId=null; submitImageBtn.innerHTML='<i class="fas fa-save"></i> 保存图片'; cancelEditBtn.style.display='none'; }
@@ -644,7 +699,8 @@
     window.addEventListener('resize', ()=>{ resizeCanvas(); starsBg=[]; initStars(); });
     async function init() {
         await initBackendHash();
-        loadDefaultData();
+        // 从云端加载数据（必须成功加载配置）
+        await loadImagesFromCloud();
         resizeCanvas(); initStars(); animateMeteor();
         initMusicPlayer();
         loadSakura();
